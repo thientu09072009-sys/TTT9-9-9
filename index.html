@@ -109,7 +109,7 @@ button{cursor:pointer}
 .tx-bets{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .tx-bet{border:1px solid #33405e;border-radius:13px;background:#11172b;color:#fff;padding:11px;text-align:left}.tx-bet.tai{border-color:#70452b}.tx-bet.xiu{border-color:#315176}
 .tx-bet strong{font-size:15px}.tx-bet small{display:block;color:#7f8aa7;margin-top:4px;font-size:9px}.tx-bet .amt{margin-top:7px;color:#ffd66a;font-weight:900;font-size:11px}
-.tx-chips{display:flex;gap:5px;overflow:auto;margin-top:9px;padding-bottom:2px}.tx-chip{flex:0 0 auto;border:1px solid #2f3854;background:#171d33;color:#cbd2e4;border-radius:8px;padding:7px 8px;font-size:9px;font-weight:900}.tx-chip.active{background:#ffc64f;color:#190d03;border-color:#ffd96c}
+.tx-chips{display:flex;gap:5px;overflow:auto;margin-top:9px;padding-bottom:2px}.tx-chip{flex:0 0 auto;border:1px solid #2f3854;background:#171d33;color:#cbd2e4;border-radius:8px;padding:7px 8px;font-size:9px;font-weight:900}.tx-chip.active{background:#ffc64f;color:#190d03;border-color:#ffd96c}.tx-chip:disabled,.xd-chip:disabled{opacity:.45;cursor:not-allowed}
 .tx-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.tx-actions button{border:0;border-radius:10px;padding:10px;font-weight:1000}.tx-actions .allin{background:linear-gradient(135deg,#ffcf58,#ed6d2a);color:#190c03}.tx-actions .clear{background:#1a2036;color:#cbd3e7;border:1px solid #303a57}
 .tx-history{margin-top:10px;border-top:1px solid #252e49;padding-top:9px}.tx-history h4{margin:0 0 7px;font-size:10px;color:#9da7c1}.tx-log{display:flex;gap:5px;overflow:auto}.tx-round{flex:0 0 auto;border:1px solid #29324c;background:#0d1221;border-radius:8px;padding:6px 8px;text-align:center}.tx-round b{display:block;font-size:11px}.tx-round span{font-size:9px;color:#7f89a5}.tx-note{font-size:8px;color:#66708c;text-align:center;margin-top:8px;line-height:1.4}
 
@@ -187,6 +187,27 @@ button{cursor:pointer}
 .rank-row:nth-child(2){background:#171d31}.rank-row:nth-child(3){background:#12172a}
 .rank-num{font-weight:1000;color:#ffd45a;text-align:center}.rank-name{font-size:10px;font-weight:900}.rank-score{font-size:10px;color:#63e39b;font-weight:1000}
 
+
+.cup-instruction{text-align:center;color:#7f8aa5;font-size:9px;margin:7px 0}
+.cup-stage{touch-action:none;cursor:grab}
+.cup-stage.dragging{cursor:grabbing}
+.cup-stage .cup{transition:transform .15s ease,opacity .2s}
+.cup-stage.ready .cup{opacity:1}
+.cup-stage.ready .cup-dice{opacity:0}
+.cup-stage.pulled .cup{opacity:.08}
+.cup-stage.pulled .cup-dice{opacity:1}
+.xd-dish{height:205px!important}
+.xd-lid{width:205px!important;height:145px!important;bottom:18px!important;z-index:5!important}
+.xd-lid:before{left:24px;right:24px;top:10px;height:30px}
+.xd-coins{z-index:2}
+.xd-slot{margin-top:8px;border:1px solid #2f3853;border-radius:12px;background:#090d19;padding:9px;text-align:center}
+.xd-slot-title{font-size:9px;color:#8d98b1;letter-spacing:1px;margin-bottom:7px}
+.xd-slot-reels{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.xd-slot-die{height:45px;border-radius:8px;background:linear-gradient(145deg,#fff,#d0d7e5);border:1px solid #9ea8bb;display:grid;grid-template-columns:repeat(3,5px);grid-template-rows:repeat(3,5px);gap:3px;place-content:center;box-shadow:0 4px 9px #0007}
+.xd-slot-die.rolling{animation:slotRoll .11s infinite alternate}
+@keyframes slotRoll{to{transform:translateY(-3px) rotate(2deg)}}
+.xd-slot small{display:block;color:#7d88a2;font-size:8px;margin-top:7px}
+
 </style>
 </head>
 <body>
@@ -200,7 +221,7 @@ button{cursor:pointer}
       <div class="logo"></div>
       <div><h1>PVP ARENA</h1><p>SCT VIRTUAL BATTLE</p></div>
     </div>
-    <div class="status">SERVER ONLINE</div>
+    <div class="status" id="serverBadge">SERVER ONLINE</div>
   </header>
 
   <section class="balance">
@@ -265,8 +286,8 @@ button{cursor:pointer}
     </div>
 
     <div class="dice" id="dice" style="display:none"></div>
-    <button class="cup-btn-main" id="cupBtn" onclick="toggleCup()">MỞ CHÉN XEM KẾT QUẢ</button>
-    <div class="cup-stage" id="cupStage">
+    <div class="cup-instruction" id="cupInstruction">KHI CÓ KẾT QUẢ: KÉO CHÉN SANG BÊN ĐỂ XEM</div>
+    <div class="cup-stage" id="cupStage" data-game="taixiu">
       <div class="cup-hint" id="cupHint">CHÉN ĐANG CHE KÍN XÚC XẮC</div>
       <div class="cup-table"></div>
       <div class="cup-dice" id="cupDice">
@@ -330,217 +351,533 @@ button{cursor:pointer}
 </div>
 
 <script>
-const API_BASE="";
+const API_BASE="https://ttt9-9-9-9.onrender.com";
+const TOKEN_KEY="sctAuthToken";
+let authToken=localStorage.getItem(TOKEN_KEY)||"";
+let serverOffset=0;
+let gamePollBusy=false;
+let txServerRoundId=null, xdServerRoundId=null;
+let txState=null, xdState=null;
+let txChoice=null, xdChoice=null;
+let txBetBusy=false, xdBetBusy=false;
 const S=["blue","fire","dark","green","gold"];
 const M=[1,2,4,8,16,32,64,128,256,512,1028];
 const B=[10000,50000,200000,500000,1000000,2000000];
-const TX_BETS=[1000,5000,10000,50000,100000,200000,500000,1000000,5000000,10000000,50000000];
-const XD_BETS=[1000,5000,10000,50000,100000,200000,500000,1000000,5000000,10000000,50000000];
+let p=0,s=0,b=10000,pot=100000000,busy=false,c=0,autoLeft=0;
 const $=id=>document.getElementById(id);
 const fmt=x=>Math.floor(Number(x)||0).toLocaleString("vi-VN");
-let token=localStorage.getItem("sctServerToken")||"";
-let account=null,b=10000,busy=false,autoLeft=0,c=0;
-let txChoice=null,txStake=0,txRoundId=null,txLastRound=null;
-let xdChoice=null,xdStake=0,xdRoundId=null;
-
-function authHeaders(){
-  return token
-    ? {"Authorization":"Bearer "+token,"Content-Type":"application/json"}
-    : {"Content-Type":"application/json"};
+let dev=localStorage.getItem("sctDevice");
+if(!dev){
+  dev=(crypto.randomUUID?crypto.randomUUID():"dev-"+Math.random().toString(36).slice(2));
+  localStorage.setItem("sctDevice",dev);
 }
-async function api(path,opt={}){
-  opt.headers={...(opt.headers||{}),...authHeaders()};
-  const r=await fetch(API_BASE+path,opt);
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(d.error||"Lỗi máy chủ");
-  return d;
-}
-function setUser(u){
-  account=u||null;
-  $("accountName").textContent=u?.username||"Khách";
-  const btn=document.querySelector(".account-btn");
-  if(btn)btn.textContent=u?"ĐĂNG XUẤT":"ĐĂNG NHẬP";
-  if(u){
-    $("points").textContent=fmt(u.ttt);
-    $("spins").textContent=fmt(u.plays);
-    $("best").textContent=fmt(u.biggest_win);
-  }else{
-    $("points").textContent="0";$("spins").textContent="0";$("best").textContent="0";
-  }
-}
-async function syncMe(){
-  if(!token){setUser(null);return false}
-  try{const d=await api("/api/me");setUser(d.user);return true}
-  catch{token="";localStorage.removeItem("sctServerToken");setUser(null);return false}
-}
-function openAuth(){
-  if(account){
-    api("/api/auth/logout",{method:"POST"}).catch(()=>{});
-    token="";localStorage.removeItem("sctServerToken");setUser(null);
-    $("msg").textContent="Đã đăng xuất.";
-    return;
-  }
-  $("authModal").classList.add("show");$("authMsg").textContent="";
-}
-function closeAuth(){$("authModal").classList.remove("show")}
-async function loginLocal(){
-  const n=$("authUser").value.trim(),pw=$("authPass").value;
-  if(n.length<3||pw.length<6){$("authMsg").textContent="Tên tối thiểu 3 ký tự, mật khẩu tối thiểu 6 ký tự.";return}
-  $("authMsg").textContent="Đang đăng nhập...";
-  try{
-    let d;
-    try{d=await api("/api/auth/login",{method:"POST",body:JSON.stringify({username:n,password:pw})})}
-    catch{d=await api("/api/auth/register",{method:"POST",body:JSON.stringify({username:n,password:pw})})}
-    token=d.token;localStorage.setItem("sctServerToken",token);setUser(d.user);
-    $("authMsg").textContent="Đăng nhập thành công.";
-    closeAuth();await refreshAll();
-  }catch(e){$("authMsg").textContent=e.message}
-}
-
 function render(){
-  $("points").textContent=fmt(account?.ttt||0);
-  $("spins").textContent=fmt(account?.plays||0);
-  $("best").textContent=fmt(account?.biggest_win||0);
+  $("points").textContent=fmt(p);
+  $("spins").textContent=s;
+  $("best").textContent=fmt(window.best||0);
+  $("pot").textContent=fmt(pot);
   $("betLabel").textContent=fmt(b)+" TTT";
   $("bets").innerHTML=B.map(x=>`<button class="bet ${x===b?"active":""}" onclick="setB(${x})">${fmt(x)}</button>`).join("");
   $("multi").innerHTML=M.map((x,i)=>`<span class="mult ${i===Math.min(c,10)?"on":""}">${x}×</span>`).join("");
 }
-function setB(x){if(!busy&&(!account||x<=Number(account.ttt)))b=x;render()}
-function scrollArena(){$("arena").scrollIntoView({behavior:"smooth",block:"center"})}
-function scrollToId(id){const e=$(id);if(e)e.scrollIntoView({behavior:"smooth",block:"center"})}
-function scrollRank(){scrollToId("rankArena")}
-
-async function spin(){
-  if(busy)return;
-  if(!token)return openAuth();
-  if(Number(account?.ttt||0)<b){$("msg").textContent="Không đủ TTT.";return}
-  busy=true;$("spin").disabled=true;$("msg").textContent="Đang xử lý Cascade...";
-  try{
-    const d=await api("/api/cascade/spin",{method:"POST",body:JSON.stringify({bet:b})});
-    account=d.user;c=d.cascades;
-    $("msg").textContent=`CASCADE ${d.cascades} • +${fmt(d.gain)} TTT`;
-    render();
-    if(autoLeft>0){
-      autoLeft--;setTimeout(()=>{busy=false;$("spin").disabled=false;if(autoLeft>0)spin();else render()},500);
-    }else{busy=false;$("spin").disabled=false;render()}
-  }catch(e){$("msg").textContent=e.message;busy=false;$("spin").disabled=false}
+function setB(x){if(!busy&&x<=p){b=x;render()}}
+function makeCell(i){
+  const el=$("c"+i), kind=S[Math.floor(Math.random()*S.length)];
+  el.dataset.kind=kind;
+  el.className="cell";
+  el.innerHTML='<div class="symbol"></div>';
 }
-function auto(n){if(!token)return openAuth();autoLeft=n;spin()}
+function fill(){for(let i=0;i<30;i++)makeCell(i)}
+function wins(){
+  const v=[...Array(30)].map((_,i)=>$("c"+i).dataset.kind),w=new Set();
+  for(let r=0;r<6;r++)for(let i=0;i<=2;i++){
+    let a=r*5+i;
+    if(v[a]&&v[a]===v[a+1]&&v[a]===v[a+2]){w.add(a);w.add(a+1);w.add(a+2)}
+  }
+  return [...w];
+}
+function cascade(){
+  let w=wins(); if(!w.length)return false;
+  w.forEach(i=>$("c"+i).classList.add("win"));
+  let gain=b*M[Math.min(c,10)];
+  p+=gain; window.best=Math.max(window.best||0,gain);
+  $("msg").textContent=`CASCADE ${c+1}  •  +${fmt(gain)} TTT`;
+  setTimeout(()=>{
+    w.forEach(i=>makeCell(i)); c++; render();
+    setTimeout(()=>{if(c<11&&cascade()){}else finish()},220);
+  },300);
+  return true;
+}
+function finish(){
+  busy=false;$("spin").disabled=false;render();
+  if(autoLeft>0){
+    autoLeft--;
+    if(p>=b)setTimeout(spin,180);
+    else{autoLeft=0;$("msg").textContent="Không đủ điểm để tiếp tục auto."}
+  }
+}
+function spin(){
+  if(busy)return;
+  if(p<b){$("msg").textContent="Không đủ điểm. Hãy nhập code thưởng.";autoLeft=0;return}
+  busy=true;$("spin").disabled=true;p-=b;s++;pot+=Math.floor(b*.1);c=0;fill();render();
+  $("msg").textContent="Đang tìm chuỗi thắng...";
+  setTimeout(()=>{if(!cascade())finish()},350);
+}
+function auto(n){
+  if(busy||p<b){$("msg").textContent="Không đủ điểm để bắt đầu AUTO.";return}
+  autoLeft=n;spin();
+}
 function stopAuto(){autoLeft=0;$("msg").textContent="Đã dừng AUTO."}
-
+function scrollArena(){$("arena").scrollIntoView({behavior:"smooth",block:"center"})}
+function comingSoon(){$("msg").textContent="Phòng này đang được phát triển."}
 function openRedeem(){
-  if(!token)return openAuth();
-  $("modal").classList.add("show");$("codeInput").value="";setTimeout(()=>$("codeInput").focus(),50)
+  $("modal").classList.add("show");
+  $("codeInput").value="";
+  setTimeout(()=>$("codeInput").focus(),50);
 }
 function closeRedeem(){$("modal").classList.remove("show")}
 async function redeemUI(){
-  if(!token)return openAuth();
-  const code=$("codeInput").value.trim();
+  const code=$("codeInput").value.trim().toUpperCase();
   if(!code){$("msg").textContent="Vui lòng nhập code.";return}
-  const btn=document.querySelector(".actions .ok");btn.disabled=true;btn.textContent="ĐANG KIỂM TRA...";
+  if(!authToken){$("msg").textContent="Hãy đăng nhập trước.";openAuth();return}
+  const btn=document.querySelector(".actions .ok");
+  btn.disabled=true;btn.textContent="ĐANG KIỂM TRA...";
   try{
-    const d=await api("/api/redeem",{method:"POST",body:JSON.stringify({code})});
-    $("msg").textContent=`NHẬN THƯỞNG THÀNH CÔNG • +${fmt(d.reward)} TTT`;
-    $("codeInput").value="";await syncMe();closeRedeem();
-  }catch(e){$("msg").textContent=e.message}
-  finally{btn.disabled=false;btn.textContent="XÁC NHẬN"}
+    const r=await apiAuth("/api/redeem",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code})});
+    if(r.response.status===401){logoutServer();return}
+    if(!r.response.ok||!r.data.ok){
+      $("msg").textContent="KHÔNG HỢP LỆ • "+(r.data.error||"Không thể đổi code");
+      return;
+    }
+    $("msg").textContent=`NHẬN THƯỞNG THÀNH CÔNG • +${fmt(r.data.reward)} TTT`;
+    await syncMe();
+    closeRedeem();
+  }catch(e){
+    console.error(e);
+    $("msg").textContent="Không kết nối được máy chủ. Hãy thử lại.";
+  }finally{
+    btn.disabled=false;btn.textContent="XÁC NHẬN";
+  }
 }
 $("codeInput").addEventListener("keydown",e=>{if(e.key==="Enter")redeemUI()});
+$("grid").innerHTML=[...Array(30)].map((_,i)=>`<div id="c${i}" class="cell"></div>`).join("");
+render();fill();
 
+/* ===== SERVER API / ACCOUNT ===== */
+async function apiAuth(path,options={}){
+  const headers={"Accept":"application/json",...(options.headers||{})};
+  if(authToken) headers.Authorization="Bearer "+authToken;
+  const response=await fetch(API_BASE+path,{...options,headers,cache:"no-store"});
+  let data={}; try{data=await response.json()}catch{}
+  return {response,data};
+}
+
+async function syncMe(){
+  if(!authToken)return false;
+  try{
+    const r=await apiAuth("/api/me");
+    if(r.response.status===401){logoutServer();return false}
+    if(!r.response.ok||!r.data.ok) return false;
+    p=Number(r.data.user.ttt||0);
+    s=Number(r.data.user.plays??r.data.user.spins??0);
+    window.best=Number(r.data.user.biggest_win??r.data.user.best_win??0);
+    render();
+    return true;
+  }catch(e){console.error("syncMe",e);return false}
+}
+
+function logoutServer(){
+  authToken="";
+  localStorage.removeItem(TOKEN_KEY);
+  account=null;
+  renderAccount();
+  $("msg").textContent="Đã đăng xuất.";
+  txState=null;xdState=null;txServerRoundId=null;xdServerRoundId=null;
+}
+
+async function loginLocal(){
+  const n=$("authUser").value.trim();
+  const pw=$("authPass").value;
+  if(n.length<3||pw.length<6){
+    $("authMsg").textContent="Tên tài khoản tối thiểu 3 ký tự, mật khẩu tối thiểu 6 ký tự.";
+    return;
+  }
+  const btn=document.querySelector(".auth-submit");
+  btn.disabled=true;btn.textContent="ĐANG KẾT NỐI...";
+  $("authMsg").textContent="";
+  try{
+    let r=await fetch(API_BASE+"/api/auth/login",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({username:n,password:pw}),cache:"no-store"
+    });
+    let d={};try{d=await r.json()}catch{}
+    if(!r.ok){
+      // Nếu chưa có tài khoản thì tạo luôn.
+      r=await fetch(API_BASE+"/api/auth/register",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username:n,password:pw}),cache:"no-store"
+      });
+      try{d=await r.json()}catch{d={}}
+    }
+    if(!r.ok||!d.ok){
+      $("authMsg").textContent=d.error||"Không đăng nhập được.";
+      return;
+    }
+    authToken=d.token;
+    localStorage.setItem(TOKEN_KEY,authToken);
+    account={name:d.user.username};
+    localStorage.setItem("sctAccount",JSON.stringify(account));
+    renderAccount();
+    closeAuth();
+    await syncMe();
+    $("msg").textContent="Đăng nhập máy chủ thành công.";
+    startGamePolling();
+  }catch(e){
+    console.error(e);
+    $("authMsg").textContent="Không kết nối được máy chủ.";
+  }finally{
+    btn.disabled=false;btn.textContent="ĐĂNG NHẬP / TẠO TÀI KHOẢN";
+  }
+}
+
+function openAuth(){
+  if(authToken){
+    if(confirm("Bạn muốn đăng xuất tài khoản này?")){
+      fetch(API_BASE+"/api/auth/logout",{method:"POST",headers:{Authorization:"Bearer "+authToken}}).catch(()=>{});
+      logoutServer();
+    }
+    return;
+  }
+  $("authModal").classList.add("show");
+  $("authMsg").textContent="";
+}
+function closeAuth(){$("authModal").classList.remove("show")}
+
+let account=JSON.parse(localStorage.getItem("sctAccount")||"null");
+function renderAccount(){
+  if($("accountName"))$("accountName").textContent=account?.name||"Khách";
+  const q=document.querySelector(".account-btn");
+  if(q)q.textContent=authToken?"ĐĂNG XUẤT":"ĐĂNG NHẬP";
+}
+renderAccount();
+
+/* ===== TÀI XỈU SERVER ===== */
+const TX_BETS=[1000,5000,10000,50000,100000,200000,500000,1000000,5000000,10000000,50000000];
+let txDisplayOpen=true;
+let txRevealTimer=null;
+
+function txFmt(n){return Math.floor(Number(n)||0).toLocaleString("vi-VN")}
+
+function txRenderServer(state){
+  if(!$("txTimer"))return;
+  txState=state;
+  const r=state?.round;
+  if(!r)return;
+
+  const nowServer=Date.now()+serverOffset;
+  const left=Math.max(0,Math.ceil((Number(r.endsAt)-nowServer)/1000));
+  const open=r.status==="open";
+  $("txTimer").textContent=open?left:"MỞ BÁT";
+  $("txPot").textContent=txFmt(10000000);
+
+  const totals=state.totals||{tai:0,xiu:0};
+  $("txTaiTotal").textContent=txFmt(totals.tai||0);
+  $("txXiuTotal").textContent=txFmt(totals.xiu||0);
+  $("txTotal").textContent=txFmt((totals.tai||0)+(totals.xiu||0));
+
+  const mine=Number(state.myStake||0);
+  $("txTaiBet").textContent=(txChoice==="tai"?txFmt(mine):"0")+" TTT";
+  $("txXiuBet").textContent=(txChoice==="xiu"?txFmt(mine):"0")+" TTT";
+  $("txChips").innerHTML=TX_BETS.map(v=>`<button class="tx-chip" ${(!authToken||!open||txBetBusy)?"disabled":""} onclick="txAdd(${v})">${txFmt(v)}</button>`).join("");
+
+  $("txLog").innerHTML=(state.history||[]).slice(0,12).map(r=>
+    `<div class="tx-round"><b>${r.total} · ${r.side}</b><span>${r.d1}-${r.d2}-${r.d3}</span></div>`
+  ).join("");
+
+  if(r.id!==txServerRoundId){
+    txServerRoundId=r.id;
+    txDisplayOpen=open;
+    clearTimeout(txRevealTimer);
+    if(open){
+      txResetVisual();
+    }
+  }
+
+  if(!open && r.dice){
+    txShowResult(r);
+  }
+}
+
+function txResetVisual(){
+  txDisplayOpen=true;
+  ["cd1","cd2","cd3"].forEach(id=>{if($(id))$(id).innerHTML=""});
+  $("txSum").textContent="?";
+  $("txOutcome").textContent="CHƯA MỞ";
+  $("cupStage").classList.remove("ready","pulled","revealed");
+  $("cupHint").textContent="CHÉN ĐANG CHE KÍN XÚC XẮC";
+  $("cup").style.transform="translateX(0) rotate(0deg)";
+}
+
+function txShowResult(r){
+  const dice=Array.isArray(r.dice)?r.dice:[];
+  if(dice.length!==3)return;
+  dice.forEach((n,i)=>renderPipDie("cd"+(i+1),Number(n)));
+  $("txSum").textContent=r.total;
+  $("txOutcome").textContent=r.side;
+  $("cupStage").classList.add("ready");
+  $("cupHint").textContent="ĐÃ CÓ KẾT QUẢ • ĐANG MỞ CHÉN";
+  clearTimeout(txRevealTimer);
+  txRevealTimer=setTimeout(()=>{
+    $("cupStage").classList.add("pulled","revealed");
+    $("cupHint").textContent="KẾT QUẢ ĐÃ ĐƯỢC MỞ";
+  },500);
+}
+
+function chooseTX(side){
+  if(!authToken){openAuth();return}
+  if(Number(txState?.myStake||0)>0){
+    $("msg").textContent="Bạn đã cược ván này, không thể đổi TÀI/XỈU.";
+    return;
+  }
+  if(txState?.round?.status!=="open"){
+    $("msg").textContent="Ván đã khóa cược.";
+    return;
+  }
+  txChoice=side;
+  $("msg").textContent="Đã chọn "+(side==="tai"?"TÀI":"XỈU")+". Chọn mức cược.";
+  txRenderServer(txState);
+}
+
+async function txPlace(amount){
+  if(txBetBusy)return;
+  if(!authToken){openAuth();return}
+  if(!txChoice){$("msg").textContent="Chọn TÀI hoặc XỈU trước.";return}
+  if(txState?.round?.status!=="open"){$("msg").textContent="Đã hết thời gian cược.";return}
+  amount=Math.floor(Number(amount));
+  if(!Number.isFinite(amount)||amount<1000)return;
+  txBetBusy=true;
+  try{
+    const r=await apiAuth("/api/tx/bet",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({side:txChoice,amount})
+    });
+    if(r.response.status===401){logoutServer();return}
+    if(!r.response.ok||!r.data.ok){
+      $("msg").textContent=r.data.error||"Không đặt được cược.";
+      return;
+    }
+    $("msg").textContent=`Đã cược ${txFmt(amount)} TTT vào ${txChoice==="tai"?"TÀI":"XỈU"}.`;
+    await syncMe();
+    await pollTx();
+  }catch(e){
+    console.error(e);$("msg").textContent="Không kết nối được máy chủ.";
+  }finally{
+    txBetBusy=false;
+  }
+}
+function txAdd(v){txPlace(v)}
+function txAllIn(){
+  if(!authToken){openAuth();return}
+  if(!txChoice){$("msg").textContent="Chọn TÀI/XỈU trước khi ALL IN.";return}
+  if(p<=0){$("msg").textContent="Không còn TTT để ALL IN.";return}
+  txPlace(p);
+}
+function txClear(){
+  if(Number(txState?.myStake||0)>0){
+    $("msg").textContent="Cược đã ghi nhận trên máy chủ, không thể hoàn trong ván này.";
+    return;
+  }
+  txChoice=null;txRenderServer(txState);
+}
+
+/* ===== CHÉN ===== */
 function renderPipDie(id,n){
   const e=$(id);if(!e)return;
   const spots={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]}[n]||[];
   e.innerHTML=Array.from({length:9},(_,i)=>`<i class="pip" style="visibility:${spots.includes(i)?"visible":"hidden"}"></i>`).join("");
 }
-function showCupDice(dice){dice.forEach((n,i)=>renderPipDie("cd"+(i+1),n))}
-function toggleCup(){
-  const outcome=$("txOutcome").textContent;
-  if(outcome==="CHƯA MỞ"||outcome==="ĐANG MỞ..."){ $("msg").textContent="Chưa có kết quả để mở chén.";return}
-  $("cupStage").classList.add("revealed");$("cupHint").textContent="KẾT QUẢ ĐÃ ĐƯỢC MỞ";$("cupBtn").textContent="CHÉN ĐÃ MỞ";
+function initCupDrag(){ /* Kết quả được server mở tự động khi hết giờ. */ }
+
+/* ===== XÓC ĐĨA SERVER ===== */
+const XD_BETS=[1000,5000,10000,50000,100000,200000,500000,1000000,5000000,10000000,50000000];
+let xdDisplayOpen=true;
+let xdRevealTimer=null;
+
+function xdFmt(n){return Math.floor(Number(n)||0).toLocaleString("vi-VN")}
+
+function xdRenderServer(state){
+  if(!$("xdChips"))return;
+  xdState=state;
+  const r=state?.round;if(!r)return;
+  const nowServer=Date.now()+serverOffset;
+  const left=Math.max(0,Math.ceil((Number(r.endsAt)-nowServer)/1000));
+  const open=r.status==="open";
+  $("xdTimer").textContent=open?left:"MỞ BÁT";
+
+  const mine=Number(state.myStake||0);
+  $("xdChips").innerHTML=XD_BETS.map(v=>
+    `<button class="xd-chip" ${(!authToken||!open||xdBetBusy)?"disabled":""} onclick="xdAdd(${v})">${xdFmt(v)}</button>`
+  ).join("");
+  $("xdHistory").innerHTML=(state.history||[]).slice(0,12).map(r=>
+    `<div class="xd-round"><b>${r.side}</b><span>${r.red_count} đỏ / ${r.white_count} trắng • x${r.multiplier}</span></div>`
+  ).join("");
+
+  if(r.id!==xdServerRoundId){
+    xdServerRoundId=r.id;
+    xdDisplayOpen=open;
+    clearTimeout(xdRevealTimer);
+    if(open)xdResetVisual();
+  }
+  if(!open && Number.isFinite(Number(r.redCount))){
+    xdShowResult(r);
+  }
 }
 
-async function refreshTX(){
-  if(!token)return;
+function xdResetVisual(){
+  $("xdResult").textContent="CHƯA MỞ";
+  $("xdLid").classList.remove("open");
+  if($("xdCoins"))$("xdCoins").querySelectorAll(".xd-coin").forEach(e=>e.classList.remove("red"));
+  if($("xdCoins"))$("xdCoins").querySelectorAll(".xd-coin").forEach(e=>e.classList.add("white"));
+}
+
+function xdShowResult(r){
+  const red=Number(r.redCount), white=Number(r.whiteCount);
+  if(!Number.isFinite(red)||!Number.isFinite(white))return;
+  $("xdResult").textContent=`${r.side} • ${red} ĐỎ / ${white} TRẮNG • x${Number(r.multiplier||1.95)}`;
+  if($("xdCoins")){
+    $("xdCoins").querySelectorAll(".xd-coin").forEach((e,i)=>{
+      e.classList.toggle("red",i<red);
+      e.classList.toggle("white",i>=red);
+    });
+  }
+  clearTimeout(xdRevealTimer);
+  xdRevealTimer=setTimeout(()=>{
+    $("xdLid").classList.add("open");
+  },450);
+}
+
+function xdChoose(side){
+  if(!authToken){openAuth();return}
+  if(Number(xdState?.myStake||0)>0){
+    $("msg").textContent="Bạn đã cược ván này, không thể đổi CHẴN/LẺ.";
+    return;
+  }
+  if(xdState?.round?.status!=="open"){
+    $("msg").textContent="Ván đã khóa cược.";return;
+  }
+  xdChoice=side;
+  $("msg").textContent="Đã chọn "+(side==="chan"?"CHẴN":"LẺ")+".";
+  xdRenderServer(xdState);
+}
+
+async function xdPlace(amount){
+  if(xdBetBusy)return;
+  if(!authToken){openAuth();return}
+  if(!xdChoice){$("msg").textContent="Chọn CHẴN hoặc LẺ.";return}
+  if(xdState?.round?.status!=="open"){$("msg").textContent="Đã hết thời gian cược.";return}
+  amount=Math.floor(Number(amount));
+  if(!Number.isFinite(amount)||amount<1000)return;
+  xdBetBusy=true;
   try{
-    const d=await api("/api/tx/state"),r=d.round;
-    txRoundId=r.id;
-    const left=Math.max(0,Math.ceil(((r.status==="open"?r.endsAt:r.resultUntil)-Date.now())/1000));
-    $("txTimer").textContent=left;
-    $("txPot").textContent=fmt(10000000);
-    $("txTaiTotal").textContent=fmt(d.totals.tai);$("txXiuTotal").textContent=fmt(d.totals.xiu);$("txTotal").textContent=fmt(d.totals.tai+d.totals.xiu);
-    $("txTaiBet").textContent=fmt(d.myStake||0)+" TTT";$("txXiuBet").textContent=fmt(d.myStake||0)+" TTT";
-    $("txChips").innerHTML=TX_BETS.map(v=>`<button class="tx-chip" onclick="txAdd(${v})">${fmt(v)}</button>`).join("");
-    if(r.status==="closed"&&r.dice){
-      showCupDice(r.dice);$("txSum").textContent=r.total;$("txOutcome").textContent=r.side;
-      $("cupStage").classList.remove("revealed");$("cupHint").textContent="KẾT QUẢ ĐÃ CHỐT — KÉO CHÉN ĐỂ XEM";$("cupBtn").textContent="MỞ CHÉN XEM KẾT QUẢ";
-    }else{
-      $("txSum").textContent="?";$("txOutcome").textContent="CHƯA MỞ";$("cupStage").classList.remove("revealed");$("cupHint").textContent="CHÉN ĐANG CHE KÍN XÚC XẮC";$("cupBtn").textContent="MỞ CHÉN XEM KẾT QUẢ";
+    const r=await apiAuth("/api/xd/bet",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({side:xdChoice,amount})
+    });
+    if(r.response.status===401){logoutServer();return}
+    if(!r.response.ok||!r.data.ok){
+      $("msg").textContent=r.data.error||"Không đặt được cược.";
+      return;
     }
-    $("txLog").innerHTML=d.history.slice(0,12).map(x=>`<div class="tx-round"><b>${x.total} · ${x.side}</b><span>${x.d1}-${x.d2}-${x.d3}</span></div>`).join("");
-  }catch{}
+    $("msg").textContent=`Đã cược ${xdFmt(amount)} TTT vào ${xdChoice==="chan"?"CHẴN":"LẺ"}.`;
+    await syncMe();
+    await pollXd();
+  }catch(e){
+    console.error(e);$("msg").textContent="Không kết nối được máy chủ.";
+  }finally{
+    xdBetBusy=false;
+  }
 }
-async function txAdd(v){
-  if(!token)return openAuth();
-  if(!txChoice){$("msg").textContent="Chọn TÀI hoặc XỈU trước.";return}
-  if(Number(account?.ttt||0)<v){$("msg").textContent="Không đủ TTT.";return}
-  try{await api("/api/tx/bet",{method:"POST",body:JSON.stringify({side:txChoice,amount:v})});await syncMe();await refreshTX()}catch(e){$("msg").textContent=e.message}
+function xdAdd(v){xdPlace(v)}
+function xdAllIn(){
+  if(!authToken){openAuth();return}
+  if(!xdChoice){$("msg").textContent="Chọn CHẴN/LẺ trước.";return}
+  if(p<=0){$("msg").textContent="Không còn TTT để ALL IN.";return}
+  xdPlace(p);
 }
-function chooseTX(side){txChoice=side;$("msg").textContent="Đã chọn "+(side==="tai"?"TÀI":"XỈU")+". Chọn mức cược."}
-async function txAllIn(){
-  if(!token)return openAuth();if(!txChoice){$("msg").textContent="Chọn TÀI/XỈU trước.";return}
-  const amount=Number(account?.ttt||0);if(amount<1000){$("msg").textContent="Không còn TTT.";return}
-  try{await api("/api/tx/bet",{method:"POST",body:JSON.stringify({side:txChoice,amount})});await syncMe();await refreshTX()}catch(e){$("msg").textContent=e.message}
+function xdClear(){
+  if(Number(xdState?.myStake||0)>0){
+    $("msg").textContent="Cược đã ghi nhận trên máy chủ, không thể hoàn trong ván này.";
+    return;
+  }
+  xdChoice=null;xdRenderServer(xdState);
 }
-function txClear(){txChoice=null;$("msg").textContent="Đã hủy lựa chọn hiển thị."}
 
-async function refreshXD(){
-  if(!token)return;
+/* ===== ĐỒNG BỘ VÁN SERVER ===== */
+async function pollTx(){
+  if(!authToken)return;
   try{
-    const d=await api("/api/xd/state"),r=d.round;
-    const left=Math.max(0,Math.ceil(((r.status==="open"?r.endsAt:r.resultUntil)-Date.now())/1000));
-    $("xdTimer").textContent=left;$("xdPot").textContent=fmt(100000000);
-    $("xdChips").innerHTML=XD_BETS.map(v=>`<button class="xd-chip" onclick="xdAdd(${v})">${fmt(v)}</button>`).join("");
-    if(r.status==="closed"){
-      $("xdResult").textContent=`${r.side} • ${r.redCount} ĐỎ / ${r.whiteCount} TRẮNG`;
-      $("xdCoins").querySelectorAll(".xd-coin").forEach((e,i)=>{e.classList.toggle("red",i<r.redCount);e.classList.toggle("white",i>=r.redCount)});
-      $("xdLid").classList.add("open");
-    }else{
-      $("xdResult").textContent="CHƯA MỞ";$("xdLid").classList.remove("open");
-      $("xdCoins").querySelectorAll(".xd-coin").forEach(e=>{e.classList.remove("red");e.classList.add("white")});
-    }
-    $("xdHistory").innerHTML=d.history.slice(0,12).map(x=>`<div class="xd-round"><b>${x.side} · ${x.multiplier}x</b><span>${x.red_count} đỏ / ${x.white_count} trắng</span></div>`).join("");
-  }catch{}
+    const r=await apiAuth("/api/tx/state");
+    if(r.response.status===401){logoutServer();return}
+    if(!r.response.ok||!r.data.ok)return;
+    serverOffset=Number(r.data.serverNow||Date.now())-Date.now();
+    txRenderServer(r.data);
+  }catch(e){console.error("pollTx",e)}
 }
-function xdChoose(side){xdChoice=side;$("msg").textContent="Đã chọn "+(side==="chan"?"CHẴN":"LẺ")}
-async function xdAdd(v){
-  if(!token)return openAuth();if(!xdChoice){$("msg").textContent="Chọn CHẴN hoặc LẺ.";return}
-  if(Number(account?.ttt||0)<v){$("msg").textContent="Không đủ TTT.";return}
-  try{await api("/api/xd/bet",{method:"POST",body:JSON.stringify({side:xdChoice,amount:v})});await syncMe();await refreshXD()}catch(e){$("msg").textContent=e.message}
+async function pollXd(){
+  if(!authToken)return;
+  try{
+    const r=await apiAuth("/api/xd/state");
+    if(r.response.status===401){logoutServer();return}
+    if(!r.response.ok||!r.data.ok)return;
+    serverOffset=Number(r.data.serverNow||Date.now())-Date.now();
+    xdRenderServer(r.data);
+  }catch(e){console.error("pollXd",e)}
 }
-async function xdAllIn(){
-  if(!token)return openAuth();if(!xdChoice){$("msg").textContent="Chọn CHẴN/LẺ trước.";return}
-  const amount=Number(account?.ttt||0);if(amount<1000)return;
-  try{await api("/api/xd/bet",{method:"POST",body:JSON.stringify({side:xdChoice,amount})});await syncMe();await refreshXD()}catch(e){$("msg").textContent=e.message}
+async function pollGames(){
+  if(gamePollBusy||!authToken)return;
+  gamePollBusy=true;
+  try{
+    await Promise.all([pollTx(),pollXd()]);
+    await syncMe();
+  }finally{gamePollBusy=false}
 }
-function xdClear(){xdChoice=null;$("msg").textContent="Đã hủy lựa chọn hiển thị."}
+function startGamePolling(){
+  if(window.__sctPollTimer)clearInterval(window.__sctPollTimer);
+  pollGames();
+  window.__sctPollTimer=setInterval(pollGames,700);
+}
 
-async function refreshRank(){
-  try{
-    const d=await fetch("/api/rank").then(r=>r.json());
-    $("rankBoard").innerHTML='<div style="font-size:9px;color:#8792ac;margin-bottom:5px">NGƯỜI CHƠI ĂN TTT NHIỀU NHẤT</div>'+
-      (d.rank.length?d.rank.slice(0,5).map((r,i)=>`<div class="rank-row"><div class="rank-num">${i+1}</div><div class="rank-name">${String(r.username).replace(/[&<>"]/g,"")}</div><div class="rank-score">+${fmt(r.total_won)} TTT</div></div>`).join(""):'<div style="font-size:9px;color:#68738e">Chưa có dữ liệu xếp hạng.</div>');
-  }catch{}
+if(authToken){
+  startGamePolling();
+}else{
+  txResetVisual();
+  xdResetVisual();
 }
-async function refreshAll(){await syncMe();render();await Promise.all([refreshTX(),refreshXD(),refreshRank()])}
-setInterval(refreshAll,1000);
-refreshAll();
+const localRank=JSON.parse(localStorage.getItem("sctRank")||"[]");
+function rankRecordWin(amount){
+  const name=account?.name||"Khách";
+  let row=localRank.find(x=>x.name===name);
+  if(!row){row={name,score:0};localRank.push(row)}
+  row.score+=Math.max(0,Number(amount)||0);
+  localRank.sort((a,b)=>b.score-a.score);
+  localStorage.setItem("sctRank",JSON.stringify(localRank.slice(0,20)));
+  renderRankBoard();
+}
+function renderRankBoard(){
+  const e=$("rankBoard");if(!e)return;
+  const rows=localRank.slice(0,5);
+  e.innerHTML='<div style="font-size:9px;color:#8792ac;margin-bottom:5px">NGƯỜI CHƠI ĂN TTT NHIỀU NHẤT</div>'+
+    (rows.length?rows.map((r,i)=>`<div class="rank-row"><div class="rank-num">${i+1}</div><div class="rank-name">${String(r.name).replace(/[&<>"]/g,"")}</div><div class="rank-score">+${Math.floor(r.score).toLocaleString("vi-VN")} TTT</div></div>`).join(""):'<div style="font-size:9px;color:#68738e">Chưa có dữ liệu xếp hạng.</div>');
+}
+renderRankBoard();
+
+initCupDrag();[1,2,3,4].forEach((n,i)=>xdPip&&xdPip('xs'+(i+1),1));
 </script>
-
 
 <div class="auth-modal" id="authModal" onclick="if(event.target===this)closeAuth()">
   <div class="auth-box">
     <h2>ĐĂNG NHẬP</h2>
-    <p>Phiên tài khoản được lưu trên máy chủ. TTT và code thưởng được lưu bằng PostgreSQL.</p>
+    <p>Tài khoản được lưu trên máy chủ. Nếu chưa có tài khoản, hệ thống sẽ tự tạo.</p>
     <input class="auth-input" id="authUser" placeholder="Tên tài khoản" maxlength="24">
     <input class="auth-input" id="authPass" placeholder="Mật khẩu" type="password" maxlength="64">
     <button class="auth-submit" onclick="loginLocal()">ĐĂNG NHẬP / TẠO TÀI KHOẢN</button>
